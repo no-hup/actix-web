@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix `DefaultHeaders` only adding the first value when the same header name is added more than once.
+
 ## 4.20.0
 
 - Add `guard_obj` parameter to all route attribute macros where `guard` is allowed, allowing any expressions to be used where it returns a `Guard`.

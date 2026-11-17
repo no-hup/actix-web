@@ -174,10 +174,12 @@ where
         let this = self.project();
         let mut res = ready!(this.fut.poll(cx))?;
 
-        // set response headers
-        for (key, value) in this.inner.headers.iter() {
+        // set response headers, keeping every value added for a name
+        for key in this.inner.headers.keys() {
             if !res.headers().contains_key(key) {
-                res.headers_mut().insert(key.clone(), value.clone());
+                for value in this.inner.headers.get_all(key) {
+                    res.headers_mut().append(key.clone(), value.clone());
+                }
             }
         }
 
@@ -193,6 +195,7 @@ mod tests {
 
     use super::*;
     use crate::{
+        http::header::SET_COOKIE,
         test::{self, TestRequest},
         HttpResponse,
     };
@@ -210,6 +213,21 @@ mod tests {
         let res = mw.call(req).await.unwrap();
         assert_eq!(res.headers().get("x-test").unwrap(), "0001");
         assert_eq!(res.headers().get("x-test-two").unwrap(), "123");
+    }
+
+    #[tokio::test(flavor = "local")]
+    async fn adding_multiple_values_for_a_header() {
+        let mw = DefaultHeaders::new()
+            .add((SET_COOKIE, "a=1"))
+            .add((SET_COOKIE, "b=2"))
+            .new_transform(test::ok_service())
+            .await
+            .unwrap();
+
+        let req = TestRequest::default().to_srv_request();
+        let res = mw.call(req).await.unwrap();
+        let cookies = res.headers().get_all(SET_COOKIE).collect::<Vec<_>>();
+        assert_eq!(cookies, ["a=1", "b=2"]);
     }
 
     #[tokio::test(flavor = "local")]
