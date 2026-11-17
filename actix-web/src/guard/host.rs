@@ -97,7 +97,8 @@ impl Guard for HostGuard {
 
         match req_host_uri.host() {
             // fall through to scheme checks
-            Some(uri_host) if self.host == uri_host => {}
+            // hosts and schemes are case-insensitive (RFC 3986 §3.1 and §3.2.2)
+            Some(uri_host) if self.host.eq_ignore_ascii_case(uri_host) => {}
 
             // Either:
             // - request's host does not match guard's host;
@@ -106,8 +107,8 @@ impl Guard for HostGuard {
         }
 
         if let Some(ref scheme) = self.scheme {
-            if let Some(ref req_host_uri_scheme) = req_host_uri.scheme_str() {
-                return scheme == req_host_uri_scheme;
+            if let Some(req_host_uri_scheme) = req_host_uri.scheme_str() {
+                return scheme.eq_ignore_ascii_case(req_host_uri_scheme);
             }
 
             // TODO: is this the correct behavior?
@@ -204,6 +205,35 @@ mod tests {
         assert!(!host.check(&req.guard_ctx()));
 
         let host = Host("localhost");
+        assert!(!host.check(&req.guard_ctx()));
+    }
+
+    #[test]
+    fn host_is_case_insensitive() {
+        let req = TestRequest::default()
+            .insert_header((
+                header::HOST,
+                header::HeaderValue::from_static("WWW.Rust-Lang.org"),
+            ))
+            .to_srv_request();
+
+        let host = Host("www.rust-lang.org");
+        assert!(host.check(&req.guard_ctx()));
+
+        let host = Host("WWW.RUST-LANG.ORG");
+        assert!(host.check(&req.guard_ctx()));
+
+        let req = TestRequest::default()
+            .insert_header((
+                header::HOST,
+                header::HeaderValue::from_static("https://www.rust-lang.org"),
+            ))
+            .to_srv_request();
+
+        let host = Host("www.rust-lang.org").scheme("HTTPS");
+        assert!(host.check(&req.guard_ctx()));
+
+        let host = Host("www.rust-lang.org").scheme("HTTP");
         assert!(!host.check(&req.guard_ctx()));
     }
 
